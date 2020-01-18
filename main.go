@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
 	"net"
@@ -23,7 +24,7 @@ func init() {
 	flag.BoolVar(&Help, "help", false, "usage help.")
 	flag.IntVar(&TCP_PORT, "tcp", 53, "dns-server tcp listen port.")
 	flag.IntVar(&UDP_PORT, "udp", 53, "dns-server udp listen port.")
-	flag.StringVar(&RESOLVER_ADD, "resolver", "192.168.0.1:53", "dns-server resolver address.")
+	flag.StringVar(&RESOLVER_ADD, "resolver", "192.168.3.1:53", "dns-server resolver address.")
 }
 
 func resolver(m dnsmessage.Message) *dnsmessage.Message {
@@ -60,6 +61,14 @@ func resolver(m dnsmessage.Message) *dnsmessage.Message {
 		log.Println(err.Error())
 		return nil
 	}
+
+	body, err := json.Marshal(&sm)
+	if err != nil {
+		log.Println(err.Error())
+		return nil
+	}
+
+	log.Printf("Resolver : %s\n", string(body))
 
 	return &sm
 }
@@ -125,14 +134,28 @@ func main() {
 				continue
 			}
 
-			log.Printf("Message : %v\n", m)
+			body, err := json.Marshal(&m)
+			if err != nil {
+				log.Println(err.Error())
+				continue
+			}
+
+			log.Printf("Message : %s\n", string(body))
 
 			q := m.Questions[0]
 
 			log.Printf("Question : %d:%s\n", q.Type, q.Name.String())
 
-			//mr := resolver(m)
-			//log.Printf("Rsponse : %v\n", mr)
+			/*
+				mr := resolver(m)
+				packed, err := mr.Pack()
+				if err != nil {
+					log.Println(err.Error())
+					continue
+				}
+
+				udpconn.WriteToUDP(packed, addr)
+			*/
 
 			build := new(dnsmessage.Builder)
 
@@ -151,8 +174,8 @@ func main() {
 				continue
 			}
 
-			A := dnsmessage.AResource{A: [4]byte{192, 168, 3, 1}}
-			AS := dnsmessage.ResourceHeader{Name: q.Name, Class: q.Class, Type: q.Type, TTL: 3600}
+			A := dnsmessage.AResource{A: [4]byte{192, 168, 3, 135}}
+			AS := dnsmessage.ResourceHeader{Name: q.Name, Class: dnsmessage.ClassINET, Type: dnsmessage.TypeA, TTL: 3600}
 
 			err = build.StartAnswers()
 			if err != nil {
@@ -166,14 +189,29 @@ func main() {
 				continue
 			}
 
-			//packed, err := mr.Pack()
 			packed, err := build.Finish()
 			if err != nil {
 				log.Println(err.Error())
 				continue
 			}
 
+			var sm dnsmessage.Message
+			err = sm.Unpack(packed)
+			if err != nil {
+				log.Println(err.Error())
+				continue
+			}
+
+			body, err = json.Marshal(&sm)
+			if err != nil {
+				log.Println(err.Error())
+				continue
+			}
+
+			log.Printf("Resolver2 : %s\n", string(body))
+
 			udpconn.WriteToUDP(packed, addr)
+
 		}
 	}()
 
